@@ -5,6 +5,7 @@ import { type CredentialStore, createModels, type Provider } from "@earendil-wor
 import lockfile from "proper-lockfile";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { AuthStorage, FileAuthStorageBackend } from "../src/core/auth-storage.ts";
+import * as pathUtils from "../src/utils/paths.ts";
 
 describe("AuthStorage", () => {
 	const tempDir = join(tmpdir(), `pi-test-auth-storage-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -111,6 +112,15 @@ describe("AuthStorage", () => {
 		expect(firstReload).toEqual({ type: "api_key", key: "newest" });
 		expect(thirdReload).toEqual({ type: "api_key", key: "newest" });
 		expect(lockSpy).toHaveBeenCalledTimes(2);
+	});
+
+	test("reloads same-size credentials when file revision metadata is unchanged", async () => {
+		vi.spyOn(pathUtils, "getFileRevision").mockReturnValue("unchanged");
+		writeAuthJson({ anthropic: { type: "api_key", key: "old" } });
+		const storage = AuthStorage.create(authJsonPath);
+		writeAuthJson({ anthropic: { type: "api_key", key: "new" } });
+
+		await expect(storage.read("anthropic")).resolves.toEqual({ type: "api_key", key: "new" });
 	});
 
 	test("keeps a coalesced reload alive while another credential reader is waiting", async () => {
