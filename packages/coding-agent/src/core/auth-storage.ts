@@ -3,6 +3,7 @@
  * Provider auth orchestration belongs to ModelRuntime and pi-ai Models.
  */
 
+import { createHash } from "node:crypto";
 import type { AuthOperationOptions, Credential, CredentialInfo, CredentialStore } from "@earendil-works/pi-ai";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
@@ -37,6 +38,19 @@ type AuthFileReadState = {
 };
 
 let sharedAuthFileReadState: { authPath: string; readState: AuthFileReadState } | undefined;
+
+function getAuthFileRevision(authPath: string, content?: string): string | undefined {
+	const fileRevision = getFileRevision(authPath);
+	if (fileRevision === undefined) return undefined;
+	try {
+		const fingerprint = createHash("sha256")
+			.update(content ?? readFileSync(authPath, "utf-8"))
+			.digest("hex");
+		return `${fileRevision}:${fingerprint}`;
+	} catch {
+		return undefined;
+	}
+}
 
 export interface AuthStorageBackend {
 	withLock<T>(fn: (current: string | undefined) => LockResult<T>): T;
@@ -338,7 +352,7 @@ export class AuthStorage implements CredentialStore {
 			sharedAuthFileReadState = { authPath, readState: this.readState };
 		}
 		if (authPath) {
-			const revision = getFileRevision(authPath);
+			const revision = getAuthFileRevision(authPath);
 			if (revision !== undefined && revision === this.readState.revision) return;
 		}
 		this.reload();
@@ -380,7 +394,7 @@ export class AuthStorage implements CredentialStore {
 		try {
 			this.storage.withLock((current) => {
 				content = current;
-				revision = this.authPath ? getFileRevision(this.authPath) : undefined;
+				revision = this.authPath ? getAuthFileRevision(this.authPath, current) : undefined;
 				return { result: undefined };
 			});
 			this.updateReadState(this.parseStorageData(content), revision);
@@ -392,7 +406,7 @@ export class AuthStorage implements CredentialStore {
 	private async reloadFromStorageAsync(options?: AuthOperationOptions): Promise<AuthStorageData> {
 		return this.storage.withLockAsync(async (content) => {
 			const currentData = this.parseStorageData(content);
-			const revision = this.authPath ? getFileRevision(this.authPath) : undefined;
+			const revision = this.authPath ? getAuthFileRevision(this.authPath, content) : undefined;
 			this.updateReadState(currentData, revision);
 			return { result: currentData };
 		}, options);
@@ -404,7 +418,7 @@ export class AuthStorage implements CredentialStore {
 			const reload = this.reloadFromStorageAsync(options);
 			return options?.signal ? reload : reload.catch(() => this.readState.data);
 		}
-		const revision = getFileRevision(this.authPath);
+		const revision = getAuthFileRevision(this.authPath);
 		if (revision !== undefined && revision === this.readState.revision) return this.readState.data;
 		if (!this.readState.reload) {
 			const controller = new AbortController();
@@ -458,7 +472,7 @@ export class AuthStorage implements CredentialStore {
 			const next = await fn(currentData[provider]);
 			if (next === undefined) {
 				latestData = currentData;
-				revision = this.authPath ? getFileRevision(this.authPath) : undefined;
+				revision = this.authPath ? getAuthFileRevision(this.authPath, content) : undefined;
 				return { result: currentData[provider] };
 			}
 
