@@ -1,0 +1,97 @@
+name: Publish Z Release
+
+# Releasing is pushing a tag: `git tag z-<upstream>.<n> && git push origin z --tags`.
+# The tag push builds, tests, packs, and publishes the fork release that the
+# projection machines install from `releases/latest`.
+on:
+  push:
+    tags:
+      - 'z-*'
+
+permissions: {}
+
+concurrency:
+  group: publish-z-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history and tags: the release notes list the commits since the
+          # last upstream release tag.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev fd-find ripgrep
+          sudo ln -s $(which fdfind) /usr/local/bin/fd
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      # `build:offline` requires the generated model data under
+      # packages/ai/src/providers/data, which is gitignored, so CI regenerates it.
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: ./test.sh
+
+      - name: Pack
+        run: |
+          mkdir -p "$RUNNER_TEMP/zrelease"
+          cd packages/coding-agent
+          npm pack --pack-destination "$RUNNER_TEMP/zrelease"
+          cd "$RUNNER_TEMP/zrelease"
+          sha256sum ./*.tgz > SHA256SUMS
+
+      - name: Write release notes
+        run: |
+          version=$(node -p "require('./packages/coding-agent/package.json').version")
+          baseline=$(git describe --tags --abbrev=0 --match 'v[0-9]*')
+          {
+            echo "Pi 投影机分发包（大本营 fork 构建产物，由 CI 构建）。"
+            echo
+            echo "- 标签：\`${RELEASE_TAG}\`"
+            echo "- 提交：\`${GITHUB_SHA}\`"
+            echo "- 最近的上游发布基线：\`${baseline}\`"
+            echo "- 相对上游基线的提交："
+            git log --oneline --no-decorate "${baseline}..HEAD" | sed 's/^/- /'
+            echo
+            echo "产物：\`npm pack\` 自 \`packages/coding-agent\`（含 \`dist/\` 与 \`npm-shrinkwrap.json\`）；校验：\`SHA256SUMS\`。"
+            echo
+            echo "投影机安装："
+            echo
+            echo '```bash'
+            echo "curl -fLO https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/SHA256SUMS"
+            echo "curl -fLO https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/earendil-works-pi-coding-agent-${version}.tgz"
+            echo "sha256sum -c SHA256SUMS"
+            echo "npm install -g --ignore-scripts ./earendil-works-pi-coding-agent-${version}.tgz"
+            echo '```'
+          } > "$RUNNER_TEMP/notes.md"
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$RELEASE_TAG" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            "$RUNNER_TEMP"/zrelease/*.tgz "$RUNNER_TEMP"/zrelease/SHA256SUMS
