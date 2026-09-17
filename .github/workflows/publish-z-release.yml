@@ -42,6 +42,11 @@ jobs:
           sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev fd-find ripgrep
           sudo ln -s $(which fdfind) /usr/local/bin/fd
 
+      - name: Fetch upstream release tags
+        run: |
+          git remote add upstream https://github.com/earendil-works/pi.git
+          git fetch --tags --force upstream
+
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
@@ -64,15 +69,18 @@ jobs:
       - name: Write release notes
         run: |
           version=$(node -p "require('./packages/coding-agent/package.json').version")
+          # The fork's own tag mirror is older than upstream's, so the release
+          # baseline is resolved against the upstream tags fetched above.
           baseline=$(git describe --tags --abbrev=0 --match 'v[0-9]*')
+          count=$(git rev-list --count "${baseline}..HEAD")
           {
             echo "Pi 投影机分发包（大本营 fork 构建产物，由 CI 构建）。"
             echo
             echo "- 标签：\`${RELEASE_TAG}\`"
             echo "- 提交：\`${GITHUB_SHA}\`"
             echo "- 最近的上游发布基线：\`${baseline}\`"
-            echo "- 相对上游基线的提交："
-            git log --oneline --no-decorate "${baseline}..HEAD" | sed 's/^/- /'
+            echo "- 相对上游基线的提交（共 ${count} 个，最多列出 30 个）："
+            git log --oneline --no-decorate -n 30 "${baseline}..HEAD" | sed 's/^/- /'
             echo
             echo "产物：\`npm pack\` 自 \`packages/coding-agent\`（含 \`dist/\` 与 \`npm-shrinkwrap.json\`）；校验：\`SHA256SUMS\`。"
             echo
