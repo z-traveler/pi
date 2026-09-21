@@ -1030,6 +1030,82 @@ describe("ExtensionRunner", () => {
 		});
 	});
 
+	describe("system_prompt_finalized", () => {
+		it("gives each observer an isolated event and ignores replacement returns", async () => {
+			const mutating = `
+				export default function(pi) {
+					pi.on("system_prompt_finalized", (event) => {
+						globalThis.__finalizedMutationSeen = event.systemPrompt;
+						event.systemPrompt = "mutated by first observer";
+						return { systemPrompt: "replaced by first observer" };
+					});
+				}
+			`;
+			const observing = `
+				export default function(pi) {
+					pi.on("system_prompt_finalized", (event, ctx) => {
+						globalThis.__finalizedObservation = { event: event.systemPrompt, ctx: ctx.getSystemPrompt() };
+					});
+				}
+			`;
+			fs.writeFileSync(path.join(extensionsDir, "a-mutating.ts"), mutating);
+			fs.writeFileSync(path.join(extensionsDir, "b-observing.ts"), observing);
+			const probe = globalThis as {
+				__finalizedMutationSeen?: string;
+				__finalizedObservation?: { event: string; ctx: string };
+			};
+			delete probe.__finalizedMutationSeen;
+			delete probe.__finalizedObservation;
+
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			expect(result.errors).toEqual([]);
+			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			runner.bindCore(extensionActions, { ...extensionContextActions, getSystemPrompt: () => "final prompt" });
+
+			await runner.emitSystemPromptFinalized("final prompt");
+
+			expect(probe.__finalizedMutationSeen).toBe("final prompt");
+			expect(probe.__finalizedObservation).toEqual({ event: "final prompt", ctx: "final prompt" });
+			delete probe.__finalizedMutationSeen;
+			delete probe.__finalizedObservation;
+		});
+
+		it("isolates a throwing observer and reports the extension error", async () => {
+			const throwing = `
+				export default function(pi) {
+					pi.on("system_prompt_finalized", () => {
+						throw new Error("observer boom");
+					});
+				}
+			`;
+			const observing = `
+				export default function(pi) {
+					pi.on("system_prompt_finalized", (event) => {
+						globalThis.__finalizedAfterThrow = event.systemPrompt;
+					});
+				}
+			`;
+			fs.writeFileSync(path.join(extensionsDir, "a-throwing-observer.ts"), throwing);
+			fs.writeFileSync(path.join(extensionsDir, "b-observing.ts"), observing);
+			const probe = globalThis as { __finalizedAfterThrow?: string };
+			delete probe.__finalizedAfterThrow;
+
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			expect(result.errors).toEqual([]);
+			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			const errors: Array<{ event: string; error: string }> = [];
+			runner.onError((err) => errors.push(err));
+
+			await runner.emitSystemPromptFinalized("final prompt");
+
+			expect(errors).toHaveLength(1);
+			expect(errors[0]?.event).toBe("system_prompt_finalized");
+			expect(errors[0]?.error).toContain("observer boom");
+			expect(probe.__finalizedAfterThrow).toBe("final prompt");
+			delete probe.__finalizedAfterThrow;
+		});
+	});
+
 	describe("tool_result chaining", () => {
 		it("chains content modifications across handlers", async () => {
 			const extCode1 = `
