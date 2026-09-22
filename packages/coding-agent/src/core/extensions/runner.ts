@@ -1373,10 +1373,7 @@ export class ExtensionRunner {
 	async emitSystemPromptFinalized(systemPrompt: string): Promise<void> {
 		const ctx = this.createContext();
 
-		for (const ext of this.extensions) {
-			const handlers = ext.handlers.get("system_prompt_finalized");
-			if (!handlers || handlers.length === 0) continue;
-
+		for (const { ext, handlers } of snapshotEventHandlers(this.extensions, "system_prompt_finalized")) {
 			for (const handler of handlers) {
 				try {
 					const event: SystemPromptFinalizedEvent = { type: "system_prompt_finalized", systemPrompt };

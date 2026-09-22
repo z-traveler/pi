@@ -1322,6 +1322,30 @@ describe("ExtensionRunner", () => {
 			expect(calls).toEqual(["A", "B", "B"]);
 		});
 
+		it("keeps system_prompt_finalized observers in a snapshot when one unsubscribes itself", async () => {
+			const calls: string[] = [];
+			const { runner } = await loadSubscriptionExtension((pi) => {
+				const unsubscribe = pi.on("system_prompt_finalized", () => {
+					calls.push("A");
+					unsubscribe();
+					pi.on("system_prompt_finalized", () => {
+						calls.push("C");
+					});
+				});
+				pi.on("system_prompt_finalized", () => {
+					calls.push("B");
+				});
+			});
+
+			// A's self-removal must not shift B out of the current dispatch, and the
+			// observer registered during dispatch must wait for the next one.
+			await runner.emitSystemPromptFinalized("final prompt");
+			expect(calls).toEqual(["A", "B"]);
+
+			await runner.emitSystemPromptFinalized("final prompt");
+			expect(calls).toEqual(["A", "B", "B", "C"]);
+		});
+
 		it("removes duplicate registrations independently and cleans up the last handler", async () => {
 			const calls: string[] = [];
 			const unsubscribers: Array<() => void> = [];
