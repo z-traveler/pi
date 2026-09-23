@@ -10,6 +10,7 @@ vi.mock("../src/utils/image-convert.ts", () => imageConvertMocks);
 import { getReadmePath } from "../src/config.ts";
 import type { ToolDefinition } from "../src/core/extensions/types.ts";
 import { type BashOperations, createBashToolDefinition } from "../src/core/tools/bash.ts";
+import { createEditToolDefinition } from "../src/core/tools/edit.ts";
 import { createReadTool, createReadToolDefinition } from "../src/core/tools/read.ts";
 import { withBuiltInRenderers } from "../src/core/tools/renderers/index.ts";
 import { createWriteToolDefinition } from "../src/core/tools/write.ts";
@@ -460,6 +461,126 @@ describe("ToolExecutionComponent parity", () => {
 		const expanded = stripAnsi(component.render(120).join("\n"));
 		expect(expanded).toContain("line-15");
 		expect(expanded).not.toContain("more lines");
+	});
+
+	// Reported defect: a blocked write/edit error card showed the whole error envelope in both
+	// collapsed and expanded states because the preview counted logical lines. Long absolute paths
+	// wrap, so a logical-line cap does not bound the card height.
+	function createBlockedMutationError(tool: "edit" | "write"): string {
+		const root = "/tmp/pi-context-effective-instruction-delivery-acceptance/fixture/project";
+		return [
+			`<mutation_gate status="blocked" tool="${tool}" reason="unseen-instructions" target="${root}/packages/api/src/gated.ts">`,
+			"This call did not run: required instructions for this target have not been delivered yet. Use the builtin read tool on each distinct read path below, then retry. If the target already exists and is readable, reading it is an alternative.",
+			`<unseen_context source="${root}/packages/api/src/AGENTS.md" scope="${root}/packages/api/src" read="${root}/packages/api/src/AGENTS.md" state="unseen"/>`,
+			`<unseen_rule source=".claude/rules/root.md" read="${root}/.claude/rules/root.md" state="unseen"/>`,
+			`<unseen_rule source="packages/api/.claude/rules/api.md" paths="src" read="${root}/packages/api/.claude/rules/api.md" state="unseen"/>`,
+			"</mutation_gate>",
+		].join("\n");
+	}
+
+	test("folds a blocked write error to a wrapped-line preview until expanded", () => {
+		const component = new ToolExecutionComponent(
+			"write",
+			"tool-write-error-fold",
+			{ path: "src/gated.ts", content: "GATE_TEST" },
+			{},
+			createWriteToolDefinition(process.cwd()),
+			createFakeTui(),
+			process.cwd(),
+		);
+		const errorText = createBlockedMutationError("write");
+		const result = { content: [{ type: "text", text: errorText }], details: undefined, isError: true };
+		component.updateResult(result, false);
+
+		const collapsed = stripAnsi(component.render(120).join("\n"));
+		expect(collapsed).toContain("to expand");
+		expect(collapsed).not.toContain("</mutation_gate>");
+
+		component.setExpanded(true);
+		const expanded = stripAnsi(component.render(120).join("\n"));
+		expect(expanded).toContain("</mutation_gate>");
+		expect(expanded.split("\n").length).toBeGreaterThan(collapsed.split("\n").length);
+
+		component.setExpanded(false);
+		expect(stripAnsi(component.render(120).join("\n"))).toBe(collapsed);
+		expect(result.content[0]?.text).toBe(errorText);
+	});
+
+	test("folds many-line write errors while keeping the expanded output lossless", () => {
+		const component = new ToolExecutionComponent(
+			"write",
+			"tool-write-error-many-lines",
+			{ path: "src/gated.ts", content: "GATE_TEST" },
+			{},
+			createWriteToolDefinition(process.cwd()),
+			createFakeTui(),
+			process.cwd(),
+		);
+		const errorText = Array.from({ length: 30 }, (_, index) => `blocked error line ${index + 1}`).join("\n");
+		component.updateResult(
+			{ content: [{ type: "text", text: errorText }], details: undefined, isError: true },
+			false,
+		);
+
+		const collapsed = stripAnsi(component.render(120).join("\n"));
+		expect(collapsed).toContain("to expand");
+		expect(collapsed).not.toContain("blocked error line 30");
+
+		component.setExpanded(true);
+		const expanded = stripAnsi(component.render(120).join("\n"));
+		for (let lineNumber = 1; lineNumber <= 30; lineNumber++) {
+			expect(expanded).toContain(`blocked error line ${lineNumber}`);
+		}
+	});
+
+	test("shows a short write error without an expand hint", () => {
+		const component = new ToolExecutionComponent(
+			"write",
+			"tool-write-error-short",
+			{ path: "src/gated.ts", content: "GATE_TEST" },
+			{},
+			createWriteToolDefinition(process.cwd()),
+			createFakeTui(),
+			process.cwd(),
+		);
+		const errorText = "File is outside the allowed workspace.";
+		component.updateResult(
+			{ content: [{ type: "text", text: errorText }], details: undefined, isError: true },
+			false,
+		);
+
+		const collapsed = stripAnsi(component.render(120).join("\n"));
+		expect(collapsed).toContain(errorText);
+		expect(collapsed).not.toContain("to expand");
+
+		component.setExpanded(true);
+		expect(stripAnsi(component.render(120).join("\n"))).toContain(errorText);
+	});
+
+	test("folds a blocked edit error to a wrapped-line preview until expanded", () => {
+		const component = new ToolExecutionComponent(
+			"edit",
+			"tool-edit-error-fold",
+			{ path: "src/gated.ts", edits: [{ oldText: "before", newText: "after" }] },
+			{},
+			createEditToolDefinition(process.cwd()),
+			createFakeTui(),
+			process.cwd(),
+		);
+		const errorText = createBlockedMutationError("edit");
+		component.updateResult(
+			{ content: [{ type: "text", text: errorText }], details: undefined, isError: true },
+			false,
+		);
+
+		const collapsed = stripAnsi(component.render(120).join("\n"));
+		expect(collapsed).toContain("to expand");
+		expect(collapsed).not.toContain("</mutation_gate>");
+
+		component.setExpanded(true);
+		const expanded = stripAnsi(component.render(120).join("\n"));
+		expect(expanded).toContain("</mutation_gate>");
+		expect(expanded.split("\n").length).toBeGreaterThan(collapsed.split("\n").length);
 	});
 
 	test("trims trailing blank display lines from write previews", () => {
