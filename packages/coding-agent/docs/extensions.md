@@ -166,6 +166,11 @@ flowchart TD
 
 Use `agent_before_settle` when an extension must append entries or request one final continuation. Use `agent_settled` for notification-only work that should run after Pi has no automatic continuation remaining.
 
+<a id="system_prompt_finalized"></a>
+
+`system_prompt_finalized` fires after every `before_agent_start` handler and before the agent run sends the prompt to the provider.
+It is observation-only: handlers cannot replace or append to the system prompt and return values are ignored; read `event.systemPrompt` (or `ctx.getSystemPrompt()`) to see what Pi will send.
+
 <a id="extensionapi-methods"></a>
 
 ## Choose an integration point

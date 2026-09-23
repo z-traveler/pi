@@ -1973,6 +1973,9 @@ export class AgentSession {
 		const updateMessage = this._preparePromptAndToolLoadout(result.systemPromptOptions);
 		this._runSystemPromptOptions = result.systemPromptOptions;
 		if (updateMessage) messages.unshift(updateMessage);
+		// Every before_agent_start handler has finished. Observation-only listeners see the
+		// finalized prompt before the run sends it to the provider.
+		await this._extensionRunner.emitSystemPromptFinalized(this.systemPrompt);
 		return messages;
 	}
 
