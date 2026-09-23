@@ -77,6 +77,7 @@ import type {
 	SessionBeforeTreeResult,
 	SessionBoundaryDraft,
 	SessionShutdownEvent,
+	SystemPromptFinalizedEvent,
 	ToolCallEvent,
 	ToolCallEventResult,
 	ToolResultEvent,
@@ -181,6 +182,7 @@ type RunnerEmitEvent = Exclude<
 	| BeforeProviderRequestEvent
 	| BeforeProviderHeadersEvent
 	| BeforeAgentStartEvent
+	| SystemPromptFinalizedEvent
 	| MessageEndEvent
 	| ResourcesDiscoverEvent
 	| InputEvent
@@ -1361,6 +1363,33 @@ export class ExtensionRunner {
 		}
 
 		return { messages, systemPromptOptions: currentOptions };
+	}
+
+	/**
+	 * Notify extensions that the before_agent_start chain finalized the system prompt for this
+	 * cycle. Observation-only: return values are ignored, and each handler receives its own event
+	 * object so one observer cannot change what another observes.
+	 */
+	async emitSystemPromptFinalized(systemPrompt: string): Promise<void> {
+		const ctx = this.createContext();
+
+		for (const { ext, handlers } of snapshotEventHandlers(this.extensions, "system_prompt_finalized")) {
+			for (const handler of handlers) {
+				try {
+					const event: SystemPromptFinalizedEvent = { type: "system_prompt_finalized", systemPrompt };
+					await handler(event, ctx);
+				} catch (err) {
+					const message = err instanceof Error ? err.message : String(err);
+					const stack = err instanceof Error ? err.stack : undefined;
+					this.emitError({
+						extensionPath: ext.path,
+						event: "system_prompt_finalized",
+						error: message,
+						stack,
+					});
+				}
+			}
+		}
 	}
 
 	async emitResourcesDiscover(

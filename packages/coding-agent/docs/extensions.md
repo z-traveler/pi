@@ -288,6 +288,7 @@ user sends prompt ────────────────────�
   ├─► input (can intercept, transform, or handle)          │
   ├─► (skill/template expansion if not handled)            │
   ├─► before_agent_start (can inject message, modify system prompt)
+  ├─► system_prompt_finalized (observation-only, after all prompt handlers)
   ├─► agent_start                                          │
   ├─► message_start / message_update / message_end         │
   │                                                        │
@@ -571,6 +572,19 @@ pi.on("before_agent_start", async (event, ctx) => {
 The `systemPromptOptions` field gives extensions access to the same structured data Pi uses to build the system prompt. Collections are mutable. Prefer changing `sections`, `selectedTools`, or `promptGuidelines`: Pi diffs the resulting prompt sections against what the model already has and appends one system message patching only the changed sections. Returning `systemPrompt`, or setting `forceSystemPrompt`, replaces the whole prompt for the run: every provider receives the forced text as its leading system prompt (a cache miss when it changes), and the session transcript keeps recording the structured sections. Tool selection changes update both the prompt contributions and executable provider tools; calling `pi.setActiveTools()` inside the handler has the same effect as editing `selectedTools`. Models that accept system messages mid-conversation receive the patch in place and keep their cached prefix; other models get the replayed prompt as their system prompt, which is a cache miss once per change.
 
 Inside `before_agent_start`, `event.systemPrompt` and `ctx.getSystemPrompt()` both reflect the chained system prompt as of the current handler. Later `before_agent_start` handlers can still modify it again.
+
+#### system_prompt_finalized
+
+Fired after every `before_agent_start` handler has finished and before the agent run sends the prompt to the provider. Observation-only: handlers cannot replace or append to the system prompt, and return values are ignored.
+
+```typescript
+pi.on("system_prompt_finalized", (event, ctx) => {
+  // event.systemPrompt - the finalized system prompt for this prompt cycle
+  // ctx.getSystemPrompt() returns the same value here
+});
+```
+
+Use it to observe what Pi will actually send, for example to record which context blocks survived earlier prompt handlers.
 
 #### agent_start / agent_end / agent_before_settle / agent_settled
 
