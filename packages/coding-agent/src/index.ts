@@ -164,6 +164,7 @@ export type {
 	SlashCommandInfo,
 	SlashCommandSource,
 	SourceInfo,
+	SystemPromptFinalizedEvent,
 	TerminalInputHandler,
 	ThinkingLevelSelectEvent,
 	ToolAnnotations,

@@ -66,6 +66,11 @@ Automatic retries, recovery, compaction, or queued work can continue afterward.
 `agent_before_settle` is the final actionable boundary: it can append entries and request one continuation.
 `agent_settled` is final and notification-only; use it when an integration needs to know Pi will not continue automatically.
 
+<a id="system_prompt_finalized"></a>
+
+`system_prompt_finalized` fires after every `before_agent_start` handler and before the agent run sends the prompt to the provider.
+It is observation-only: handlers cannot replace or append to the system prompt and return values are ignored; read `event.systemPrompt` (or `ctx.getSystemPrompt()`) to see what Pi will send.
+
 <a id="extensionapi-methods"></a>
 
 ## Choose an integration point

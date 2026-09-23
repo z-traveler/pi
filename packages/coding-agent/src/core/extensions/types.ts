@@ -928,6 +928,17 @@ export interface BeforeAgentStartEvent {
 	systemPromptOptions: NormalizedBuildSystemPromptOptions;
 }
 
+/**
+ * Fired after every `before_agent_start` handler has finished and before the agent run sends
+ * the finalized system prompt to the provider. Observation-only: handlers cannot replace or
+ * append to the prompt.
+ */
+export interface SystemPromptFinalizedEvent {
+	type: "system_prompt_finalized";
+	/** The finalized system prompt for this prompt cycle. */
+	readonly systemPrompt: string;
+}
+
 /** Fired when an agent loop starts */
 export interface AgentStartEvent {
 	type: "agent_start";
@@ -1387,6 +1398,7 @@ export type ExtensionEvent =
 	| AfterProviderResponseEvent
 	| ProviderStreamEvent
 	| BeforeAgentStartEvent
+	| SystemPromptFinalizedEvent
 	| AgentStartEvent
 	| AgentEndEvent
 	| AgentBeforeSettleEvent
@@ -1611,6 +1623,7 @@ export interface ExtensionAPI {
 		event: "before_agent_start",
 		handler: ExtensionHandler<BeforeAgentStartEvent, BeforeAgentStartEventResult>,
 	): () => void;
+	on(event: "system_prompt_finalized", handler: ExtensionHandler<SystemPromptFinalizedEvent>): () => void;
 	on(event: "agent_start", handler: ExtensionHandler<AgentStartEvent>): () => void;
 	on(event: "agent_end", handler: ExtensionHandler<AgentEndEvent>): () => void;
 	on(

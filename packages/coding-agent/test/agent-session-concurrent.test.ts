@@ -448,6 +448,7 @@ describe("AgentSession concurrent prompt guard", () => {
 					images: unknown,
 					systemPromptOptions: BuildSystemPromptOptions,
 				) => Promise<{ messages: []; systemPromptOptions: NormalizedBuildSystemPromptOptions }>;
+				emitSystemPromptFinalized: (systemPrompt: string) => Promise<void>;
 				invalidate: (message?: string) => void;
 			};
 		};
@@ -469,6 +470,7 @@ describe("AgentSession concurrent prompt guard", () => {
 				messages: [],
 				systemPromptOptions: normalizeBuildSystemPromptOptions(systemPromptOptions),
 			}),
+			emitSystemPromptFinalized: async () => {},
 			invalidate: () => {},
 		};
 
@@ -595,6 +597,7 @@ describe("AgentSession concurrent prompt guard", () => {
 					images: unknown,
 					systemPromptOptions: BuildSystemPromptOptions,
 				) => Promise<{ messages: []; systemPromptOptions: NormalizedBuildSystemPromptOptions }>;
+				emitSystemPromptFinalized: (systemPrompt: string) => Promise<void>;
 				invalidate: (message?: string) => void;
 			};
 		};
@@ -612,6 +615,7 @@ describe("AgentSession concurrent prompt guard", () => {
 				messages: [],
 				systemPromptOptions: normalizeBuildSystemPromptOptions(systemPromptOptions),
 			}),
+			emitSystemPromptFinalized: async () => {},
 			invalidate: () => {},
 		};
 
