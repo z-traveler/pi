@@ -11,6 +11,7 @@ import { keyHint } from "../../../modes/interactive/components/keybinding-hints.
 import { getLanguageFromPath, highlightCode, type Theme } from "../../../modes/interactive/theme/theme.ts";
 import type { ToolDefinition, ToolRenderResultOptions } from "../../extensions/types.ts";
 import { normalizeDisplayText, renderToolPath, replaceTabs, str } from "../render-utils.ts";
+import { ErrorPreviewText } from "./error-preview.ts";
 
 type WriteHighlightCache = {
 	rawPath: string | null;
@@ -167,15 +168,13 @@ export const writeRenderers: Pick<ToolDefinition<any, any>, "renderCall" | "rend
 		);
 		return component;
 	},
-	renderResult(result, _options, theme, context) {
+	renderResult(result, options, theme, context) {
 		const output = formatWriteResult({ ...result, isError: context.isError }, theme);
 		if (!output) {
 			const component = (context.lastComponent as Container | undefined) ?? new Container();
 			component.clear();
 			return component;
 		}
-		const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-		text.setText(output);
-		return text;
+		return new ErrorPreviewText(output, theme, options.expanded);
 	},
 };

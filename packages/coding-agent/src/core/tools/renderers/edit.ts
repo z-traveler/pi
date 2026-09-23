@@ -13,6 +13,7 @@ import type { ToolDefinition } from "../../extensions/types.ts";
 import type { EditToolDetails } from "../edit.ts";
 import { computeEditsDiff, type Edit, type EditDiffError, type EditDiffResult } from "../edit-diff.ts";
 import { renderToolPath, str } from "../render-utils.ts";
+import { ErrorPreviewText } from "./error-preview.ts";
 
 type EditPreview = EditDiffResult | EditDiffError;
 export type EditRenderState = {
@@ -194,7 +195,7 @@ export const editRenderers: Pick<ToolDefinition<any, any>, "renderCall" | "rende
 
 		return buildEditCallComponent(component, args as RenderableEditArgs | undefined, theme, context.cwd);
 	},
-	renderResult(result, _options, theme, context) {
+	renderResult(result, options, theme, context) {
 		const callComponent = context.state.callComponent;
 		const previewInput = getRenderablePreviewInput(context.args as RenderableEditArgs | undefined);
 		const argsKey = previewInput ? JSON.stringify({ path: previewInput.path, edits: previewInput.edits }) : undefined;
@@ -232,7 +233,11 @@ export const editRenderers: Pick<ToolDefinition<any, any>, "renderCall" | "rende
 			return component;
 		}
 		component.addChild(new Spacer(1));
-		component.addChild(new Text(output, 1, 0));
+		component.addChild(
+			context.isError
+				? new ErrorPreviewText(output, theme, options.expanded, { paddingX: 1 })
+				: new Text(output, 1, 0),
+		);
 		return component;
 	},
 };
