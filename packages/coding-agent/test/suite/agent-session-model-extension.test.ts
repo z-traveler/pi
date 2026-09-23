@@ -506,6 +506,84 @@ describe("AgentSession model and extension characterization", () => {
 		).toBe(true);
 	});
 
+	it("notifies system_prompt_finalized observers after the before_agent_start chain on every prompt cycle", async () => {
+		const sequence: string[] = [];
+		const observedPrompts: string[] = [];
+		const harness = await createHarness({
+			extensionFactories: [
+				(pi) => {
+					pi.on("before_agent_start", async (event) => {
+						sequence.push("before_agent_start");
+						return { systemPrompt: `${event.systemPrompt}\n\ncycle marker` };
+					});
+				},
+				(pi) => {
+					pi.on("system_prompt_finalized", (event, ctx) => {
+						sequence.push("system_prompt_finalized");
+						observedPrompts.push(`${event.systemPrompt}||${ctx.getSystemPrompt()}`);
+					});
+				},
+			],
+		});
+		harnesses.push(harness);
+		const providerPrompts: string[] = [];
+		harness.setResponses([
+			(context) => {
+				sequence.push("provider");
+				providerPrompts.push(getCurrentSystemPrompt(context.messages));
+				return fauxAssistantMessage("done");
+			},
+			(context) => {
+				sequence.push("provider");
+				providerPrompts.push(getCurrentSystemPrompt(context.messages));
+				return fauxAssistantMessage("done");
+			},
+		]);
+
+		await harness.session.prompt("first");
+		await harness.session.prompt("second");
+
+		expect(sequence).toEqual([
+			"before_agent_start",
+			"system_prompt_finalized",
+			"provider",
+			"before_agent_start",
+			"system_prompt_finalized",
+			"provider",
+		]);
+		expect(observedPrompts).toEqual([
+			`${providerPrompts[0]}||${providerPrompts[0]}`,
+			`${providerPrompts[1]}||${providerPrompts[1]}`,
+		]);
+		expect(providerPrompts[0]).toContain("cycle marker");
+	});
+
+	it("notifies system_prompt_finalized observers with the base prompt when no handler modifies it", async () => {
+		const observedPrompts: string[] = [];
+		const harness = await createHarness({
+			extensionFactories: [
+				(pi) => {
+					pi.on("system_prompt_finalized", (event) => {
+						observedPrompts.push(event.systemPrompt);
+					});
+				},
+			],
+		});
+		harnesses.push(harness);
+		let providerPrompt = "";
+		harness.setResponses([
+			(context) => {
+				providerPrompt = getCurrentSystemPrompt(context.messages);
+				return fauxAssistantMessage("done");
+			},
+		]);
+
+		await harness.session.prompt("hello");
+
+		expect(observedPrompts).toEqual([providerPrompt]);
+		expect(providerPrompt.length).toBeGreaterThan(0);
+	});
+
 	it("bindExtensions emits session_start and reload emits session_shutdown then session_start", async () => {
 		const lifecycleEvents: string[] = [];
 		const harness = await createHarness({
