@@ -70,6 +70,7 @@ jobs:
 
       - name: Pack
         run: |
+          node scripts/generate-coding-agent-install-lock.mjs --check
           mkdir -p "$RUNNER_TEMP/zrelease"
           cd packages/coding-agent
           npm pack --pack-destination "$RUNNER_TEMP/zrelease"
@@ -92,7 +93,7 @@ jobs:
             echo "- 相对上游基线的提交（共 ${count} 个，最多列出 30 个）："
             git log --oneline --no-decorate -n 30 "${baseline}..HEAD" | sed 's/^/- /'
             echo
-            echo "产物：\`npm pack\` 自 \`packages/coding-agent\`（含 \`dist/\`）；校验：\`SHA256SUMS\`。"
+            echo "产物：\`npm pack\` 自 \`packages/coding-agent\`（含 \`dist/\`；内部 \`@earendil-works/*\` 依赖按本版本精确固定，投影机直接 \`npm install -g\` 即可复现）；校验：\`SHA256SUMS\`。"
             echo
             echo "投影机安装："
             echo
